@@ -132,6 +132,20 @@ const hourQuantiles = (p1: number, center: number, sig: number): number[] => {
 const forecastCase = (c: Case): Array<{ hour: number; q: number[] }> => {
   const first = c.known.find((k) => k.hour === 1);
   if (first === undefined) throw new Error('case has no hour-1 print');
+  // Guard the hour-1 print: it anchors every quantile (p1) and the regime
+  // split (channels). A zero, negative, non-finite, or non-numeric print
+  // used to slip through silently — Math.max(1, NaN) is NaN, so the whole
+  // forecast came out NaN, and a bogus channels value quietly picked the
+  // wrong regime. Fail loudly here instead of shipping a bad forecast.
+  if (typeof first.viewers !== 'number' || !Number.isFinite(first.viewers) || first.viewers <= 0) {
+    throw new Error(`case hour-1 viewers is ${JSON.stringify(first.viewers)}, not a positive finite number`);
+  }
+  if (
+    first.channels !== undefined &&
+    (typeof first.channels !== 'number' || !Number.isFinite(first.channels) || first.channels < 0)
+  ) {
+    throw new Error(`case hour-1 channels is ${JSON.stringify(first.channels)}, not a finite number >= 0`);
+  }
   const p1 = Math.max(1, first.viewers);
   const ch1 = first.channels ?? 0;
   const hours = c.forecast.map(({ hour }) => hour).sort((a, b) => a - b);
